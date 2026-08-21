@@ -86,6 +86,7 @@ class ClipboardApp:
         self.pin_notice = ""
         self.server: socket.socket | None = None
         self.image_refs: list[tk.PhotoImage] = []
+        self.clipboard_holder: subprocess.Popen[bytes] | None = None
 
         self.root = tk.Tk()
         self.root.withdraw()
@@ -269,15 +270,35 @@ class ClipboardApp:
         item = items[self.selected]
         if item["kind"] == "image":
             data = Path(item["path"]).read_bytes()
-            subprocess.run(["wl-copy", "--type", item.get("mime", "image/png")], input=data, check=False)
+            self.replace_clipboard(data, item.get("mime", "image/png"))
         else:
-            subprocess.run(["wl-copy"], input=item["text"].encode(), check=False)
+            self.replace_clipboard(item["text"].encode())
             # Once the panel closes, Hyprland restores the previously focused
             # window. Type into it as well as placing the value on the clipboard.
             self.root.after(90, lambda text=item["text"]: self.inject_text(text))
         self.last_signature = None
         self.hide()
         return "break"
+
+    def replace_clipboard(self, data: bytes, mime: str | None = None) -> None:
+        """Keep owning the clipboard so future Ctrl+V requests still work."""
+        if self.clipboard_holder and self.clipboard_holder.poll() is None:
+            self.clipboard_holder.terminate()
+            try:
+                self.clipboard_holder.wait(timeout=0.25)
+            except subprocess.TimeoutExpired:
+                self.clipboard_holder.kill()
+        command = ["wl-copy", "--foreground"]
+        if mime:
+            command.extend(["--type", mime])
+        try:
+            holder = subprocess.Popen(command, stdin=subprocess.PIPE)
+            assert holder.stdin is not None
+            holder.stdin.write(data)
+            holder.stdin.close()
+            self.clipboard_holder = holder
+        except (OSError, BrokenPipeError):
+            self.clipboard_holder = None
 
     @staticmethod
     def inject_text(text: str) -> None:
