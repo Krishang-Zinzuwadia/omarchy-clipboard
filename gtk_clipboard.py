@@ -94,12 +94,15 @@ class ClipboardApp(Gtk.Application):
     def install_css(self) -> None:
         css = f"""
         window {{ background: {COLORS['background']}; }}
-        .panel {{ background: {COLORS['background']}; padding: 20px; }}
+        .panel {{ background: {COLORS['background']}; padding: 8px; }}
         .footer {{ color: {COLORS['muted']}; font-size: 12px; }}
-        .card {{ background: {COLORS['panel']}; border: 1px solid {COLORS['selection']}; border-radius: 9px; padding: 11px 13px; }}
-        .card.active {{ background: {COLORS['selection']}; border-color: {COLORS['accent']}; }}
-        .card.pinned {{ border-color: {COLORS['yellow']}; }}
-        .item-text {{ color: {COLORS['foreground']}; font-size: 16px; }}
+        .card {{ background: transparent; border: 0; border-radius: 0; padding: 9px 12px; }}
+        .card.active {{ background: {COLORS['selection']}; border: 1px solid {COLORS['accent']}; border-radius: 0; }}
+        .card.pinned {{ border-left: 2px solid {COLORS['yellow']}; }}
+        list row, list row:selected, list row:focus, list row:focus-visible {{
+            background: transparent; border: 0; outline: none; box-shadow: none;
+        }}
+        .item-text {{ color: {COLORS['foreground']}; font-size: 15px; }}
         .kind {{ color: {COLORS['cyan']}; font-size: 10px; font-weight: 700; letter-spacing: 1px; }}
         .pin {{ color: {COLORS['yellow']}; font-size: 16px; }}
         .pin-badge {{ color: {COLORS['yellow']}; font-size: 10px; font-weight: 800; letter-spacing: 0.8px; }}
@@ -179,8 +182,8 @@ class ClipboardApp(Gtk.Application):
             return False
         self.window = Gtk.ApplicationWindow(application=self)
         self.window.set_title("Omarchy Clipboard")
-        self.window.set_default_size(560, 620)
-        self.window.set_size_request(560, 620)
+        self.window.set_default_size(460, 185)
+        self.window.set_size_request(460, 185)
         self.window.set_resizable(False)
         panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         panel.add_css_class("panel")
@@ -194,7 +197,7 @@ class ClipboardApp(Gtk.Application):
         panel.append(scroller)
         footer = Gtk.Label(label=self.notice or "↑ ↓ navigate    Enter select    P pin    Delete remove    Esc close", xalign=0)
         footer.add_css_class("footer")
-        footer.set_margin_top(14)
+        footer.set_margin_top(8)
         panel.append(footer)
         self.window.set_child(panel)
         key = Gtk.EventControllerKey()
@@ -213,7 +216,7 @@ class ClipboardApp(Gtk.Application):
             self.items_box.remove(row)
         for index, item in enumerate(self.filtered()[:8]):
             row = Gtk.ListBoxRow()
-            row.set_margin_bottom(7)
+            row.set_margin_bottom(0)
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
             box.add_css_class("card")
             if index == self.selected:
@@ -222,7 +225,7 @@ class ClipboardApp(Gtk.Application):
                 box.add_css_class("pinned")
             if item["kind"] == "image":
                 picture = Gtk.Picture.new_for_filename(item["path"])
-                picture.set_size_request(92, 60)
+                picture.set_size_request(72, 46)
                 picture.set_content_fit(Gtk.ContentFit.COVER)
                 box.append(picture)
             body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
