@@ -395,7 +395,7 @@ class ClipboardApp(Gtk.Application):
         if item["kind"] == "image":
             self.replace_clipboard(Path(item["path"]).read_bytes(), item.get("mime", "image/png"))
         else:
-            self.replace_clipboard(item["text"].encode())
+            self.replace_clipboard(item["text"].encode(), "text/plain;charset=utf-8")
         self.last_signature = None
         self.window.set_visible(False)
         if item["kind"] == "text":
