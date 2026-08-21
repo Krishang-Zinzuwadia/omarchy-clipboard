@@ -174,7 +174,10 @@ class ClipboardApp(Gtk.Application):
         self.save()
 
     def filtered(self) -> list[dict]:
-        return self.history
+        return sorted(
+            self.history,
+            key=lambda item: (not item.get("pinned", False), -item.get("time", 0)),
+        )
 
     def show_panel(self) -> bool:
         self.selected = 0
