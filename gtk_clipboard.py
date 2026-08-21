@@ -95,16 +95,17 @@ class ClipboardApp(Gtk.Application):
     def install_css(self) -> None:
         css = f"""
         window {{ background: {COLORS['background']}; }}
-        .panel {{ background: {COLORS['background']}; padding: 28px; }}
-        .title {{ color: {COLORS['foreground']}; font-size: 30px; font-weight: 800; }}
+        .panel {{ background: {COLORS['background']}; padding: 22px; }}
+        .title {{ color: {COLORS['foreground']}; font-size: 25px; font-weight: 800; }}
         .subtitle, .footer {{ color: {COLORS['muted']}; font-size: 12px; }}
-        .search {{ background: {COLORS['panel']}; color: {COLORS['foreground']}; border: 1px solid {COLORS['selection']}; border-radius: 10px; padding: 13px 16px; font-size: 16px; }}
-        .card {{ background: {COLORS['panel']}; border: 1px solid {COLORS['selection']}; border-radius: 9px; padding: 14px; }}
+        .search {{ background: {COLORS['panel']}; color: {COLORS['foreground']}; border: 1px solid {COLORS['selection']}; border-radius: 10px; padding: 11px 14px; font-size: 15px; }}
+        .card {{ background: {COLORS['panel']}; border: 1px solid {COLORS['selection']}; border-radius: 9px; padding: 11px 13px; }}
         .card:selected {{ background: {COLORS['selection']}; border-color: {COLORS['accent']}; }}
         .card.pinned {{ border-color: {COLORS['yellow']}; }}
-        .item-text {{ color: {COLORS['foreground']}; font-size: 17px; }}
+        .item-text {{ color: {COLORS['foreground']}; font-size: 16px; }}
         .kind {{ color: {COLORS['cyan']}; font-size: 10px; font-weight: 700; letter-spacing: 1px; }}
-        .pin {{ color: {COLORS['yellow']}; font-size: 17px; }}
+        .pin {{ color: {COLORS['yellow']}; font-size: 16px; }}
+        .pin-badge {{ color: {COLORS['yellow']}; font-size: 10px; font-weight: 800; letter-spacing: 0.8px; }}
         button {{ background: transparent; border: 0; }}
         """
         provider = Gtk.CssProvider()
@@ -185,7 +186,8 @@ class ClipboardApp(Gtk.Application):
             return False
         self.window = Gtk.ApplicationWindow(application=self)
         self.window.set_title("Omarchy Clipboard")
-        self.window.set_default_size(700, 760)
+        self.window.set_default_size(560, 620)
+        self.window.set_size_request(560, 620)
         self.window.set_resizable(False)
         panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         panel.add_css_class("panel")
@@ -207,12 +209,18 @@ class ClipboardApp(Gtk.Application):
         self.search.set_margin_top(20)
         self.search.set_margin_bottom(16)
         self.search.connect("changed", self.search_changed)
+        self.search.connect("activate", lambda _entry: self.activate_index(self.selected))
         panel.append(self.search)
         self.items_box = Gtk.ListBox()
         self.items_box.add_css_class("items")
         self.items_box.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.items_box.connect("row-activated", lambda _box, row: self.activate_index(row.get_index()))
-        panel.append(self.items_box)
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_min_content_height(340)
+        scroller.set_max_content_height(360)
+        scroller.set_child(self.items_box)
+        panel.append(scroller)
         footer = Gtk.Label(label=self.notice or "↑ ↓ navigate    Enter select    P pin    Esc close", xalign=0)
         footer.add_css_class("footer")
         footer.set_margin_top(14)
@@ -252,8 +260,8 @@ class ClipboardApp(Gtk.Application):
             body.set_hexpand(True)
             line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             if item.get("pinned"):
-                pin = Gtk.Label(label="⚑")
-                pin.add_css_class("pin")
+                pin = Gtk.Label(label="● PINNED")
+                pin.add_css_class("pin-badge")
                 line.append(pin)
             text = item.get("text", "Image").replace("\n", " ↵ ")
             label = Gtk.Label(label=text[:180] + ("…" if len(text) > 180 else ""), xalign=0)
@@ -267,6 +275,7 @@ class ClipboardApp(Gtk.Application):
             body.append(kind)
             box.append(body)
             pin_button = Gtk.Button(label="★" if item.get("pinned") else "☆")
+            pin_button.set_tooltip_text("Unpin item" if item.get("pinned") else "Pin item")
             pin_button.add_css_class("pin")
             pin_button.connect("clicked", lambda _b, i=index: self.pin_index(i))
             box.append(pin_button)
@@ -284,15 +293,22 @@ class ClipboardApp(Gtk.Application):
             self.activate_index(self.selected)
         elif name == "Down" and items:
             self.selected = min(self.selected + 1, min(len(items), 8) - 1)
-            self.render_items()
+            self.select_current_row()
         elif name == "Up" and items:
             self.selected = max(0, self.selected - 1)
-            self.render_items()
+            self.select_current_row()
         elif name in ("p", "P") and items:
             self.pin_index(self.selected)
         else:
             return False
         return True
+
+    def select_current_row(self) -> None:
+        """Move the ListBox selection without rebuilding the panel."""
+        if self.items_box:
+            row = self.items_box.get_row_at_index(self.selected)
+            if row:
+                self.items_box.select_row(row)
 
     def pin_index(self, index: int) -> None:
         items = self.filtered()
@@ -316,10 +332,17 @@ class ClipboardApp(Gtk.Application):
             self.replace_clipboard(Path(item["path"]).read_bytes(), item.get("mime", "image/png"))
         else:
             self.replace_clipboard(item["text"].encode())
-            if shutil.which("wtype"):
-                GLib.timeout_add(100, lambda: (subprocess.run(["wtype", "--", item["text"]], check=False), False)[1])
         self.last_signature = None
         self.window.set_visible(False)
+        if item["kind"] == "text" and shutil.which("wtype"):
+            # Pasting after the panel releases focus targets the previously
+            # focused application and uses the same clipboard selection.
+            GLib.timeout_add(150, self.paste_into_previous_focus)
+
+    @staticmethod
+    def paste_into_previous_focus() -> bool:
+        subprocess.run(["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"], check=False)
+        return False
 
     def replace_clipboard(self, data: bytes, mime: str | None = None) -> None:
         if self.holder and self.holder.poll() is None:
