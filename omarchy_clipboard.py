@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
 import time
 import uuid
 from pathlib import Path
+import tomllib
 import tkinter as tk
 from tkinter import font as tkfont
 
@@ -21,14 +23,41 @@ HISTORY_FILE = BASE_DIR / "history.json"
 SOCKET_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "omarchy-clipboard.sock"
 POLL_SECONDS = 0.35
 
-BG = "#151719"
-PANEL = "#202326"
-PANEL_HOVER = "#2b3034"
-TEXT = "#f3f4f5"
-MUTED = "#9da4aa"
-ACCENT = "#7dd3fc"
-ACCENT_DARK = "#153449"
-DIVIDER = "#30353a"
+# Omarchy Nord palette (kept in sync with /usr/share/omarchy/themes/nord/colors.toml).
+BG = "#222730"
+PANEL = "#2e3440"
+PANEL_HOVER = "#3b4252"
+TEXT = "#d8dee9"
+MUTED = "#667080"
+ACCENT = "#81a1c1"
+ACCENT_DARK = "#434c5e"
+DIVIDER = "#4c566a"
+CYAN = "#88c0d0"
+GREEN = "#a3be8c"
+YELLOW = "#ebcb8b"
+
+
+def load_omarchy_theme() -> None:
+    """Use the active Omarchy theme, falling back to Nord defaults."""
+    global BG, PANEL, TEXT, MUTED, ACCENT, ACCENT_DARK, DIVIDER, CYAN, GREEN, YELLOW
+    theme_file = Path.home() / ".local/state/omarchy/current/theme/colors.toml"
+    try:
+        colors = tomllib.loads(theme_file.read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return
+    BG = colors.get("background", BG)
+    PANEL = colors.get("lighter_background", PANEL)
+    TEXT = colors.get("foreground", TEXT)
+    MUTED = colors.get("dark_foreground", MUTED)
+    ACCENT = colors.get("accent", ACCENT)
+    ACCENT_DARK = colors.get("selection", ACCENT_DARK)
+    DIVIDER = colors.get("muted", DIVIDER)
+    CYAN = colors.get("cyan", CYAN)
+    GREEN = colors.get("green", GREEN)
+    YELLOW = colors.get("yellow", YELLOW)
+
+
+load_omarchy_theme()
 
 
 def run_clipboard(*args: str, input_data: bytes | None = None) -> bytes | None:
@@ -54,6 +83,7 @@ class ClipboardApp:
         self.visible = False
         self.selected = 0
         self.query = ""
+        self.pin_notice = ""
         self.server: socket.socket | None = None
         self.image_refs: list[tk.PhotoImage] = []
 
@@ -220,9 +250,17 @@ class ClipboardApp:
             return "break"
         item = items[self.selected]
         item["pinned"] = not item.get("pinned", False)
+        self.pin_notice = "Pinned — saved across restarts" if item["pinned"] else "Unpinned — available this session"
         self.save_history()
         self.draw()
+        self.root.after(1400, self.clear_pin_notice)
         return "break"
+
+    def clear_pin_notice(self) -> None:
+        if self.pin_notice:
+            self.pin_notice = ""
+            if self.visible:
+                self.draw()
 
     def activate(self) -> str:
         items = self.filtered()
@@ -234,16 +272,24 @@ class ClipboardApp:
             subprocess.run(["wl-copy", "--type", item.get("mime", "image/png")], input=data, check=False)
         else:
             subprocess.run(["wl-copy"], input=item["text"].encode(), check=False)
+            # Once the panel closes, Hyprland restores the previously focused
+            # window. Type into it as well as placing the value on the clipboard.
+            self.root.after(90, lambda text=item["text"]: self.inject_text(text))
         self.last_signature = None
         self.hide()
         return "break"
+
+    @staticmethod
+    def inject_text(text: str) -> None:
+        if shutil.which("wtype"):
+            subprocess.run(["wtype", "--", text], check=False)
 
     def draw(self) -> None:
         for child in self.root.winfo_children():
             child.destroy()
         self.image_refs.clear()
         screen_w, screen_h = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
-        width = min(820, max(500, screen_w - 40))
+        width = min(560, max(440, screen_w - 40))
         row_height = 76
         visible_limit = min(8, max(1, (screen_h - 290) // row_height))
         items = self.filtered()[:visible_limit]
@@ -308,17 +354,19 @@ class ClipboardApp:
             text_box.pack(side="left", fill="both", expand=True)
             tk.Label(text_box, text=label, bg=card_bg, fg=TEXT, font=(self.ui_font, 11), anchor="w", justify="left", wraplength=width - 180).pack(anchor="w", fill="x", expand=True)
             kind = "IMAGE" if item["kind"] == "image" else "TEXT"
-            tk.Label(text_box, text=kind, bg=card_bg, fg=ACCENT if selected else MUTED, font=(self.mono_font, 8, "bold"), anchor="w").pack(anchor="w", pady=(4, 0))
+            kind_color = GREEN if item["kind"] == "image" else CYAN
+            tk.Label(text_box, text=kind, bg=card_bg, fg=kind_color, font=(self.mono_font, 8, "bold"), anchor="w").pack(anchor="w", pady=(4, 0))
             pin = tk.Button(card, text="★" if item.get("pinned") else "☆",
                             command=lambda i=index: self.pin_index(i),
-                            bg=card_bg, fg=ACCENT if item.get("pinned") else MUTED,
+                            bg=card_bg, fg=YELLOW if item.get("pinned") else MUTED,
                             activebackground=card_bg, activeforeground=ACCENT,
                             relief="flat", borderwidth=0, highlightthickness=0,
                             font=(self.ui_font, 15), cursor="hand2")
             pin.pack(side="right", padx=(8, 0))
             if selected:
                 tk.Label(card, text="↵", bg=card_bg, fg=ACCENT, font=(self.ui_font, 17, "bold")).pack(side="right", padx=(10, 0))
-        tk.Label(outer, text="↑ ↓ navigate     Enter select     P pin     Esc close", bg=BG, fg=MUTED, font=(self.mono_font, 8)).pack(anchor="w", pady=(12, 0))
+        footer_text = self.pin_notice or "↑ ↓ navigate     Enter select     P pin     Esc close"
+        tk.Label(outer, text=footer_text, bg=BG, fg=ACCENT if self.pin_notice else MUTED, font=(self.mono_font, 8, "bold" if self.pin_notice else "normal")).pack(anchor="w", pady=(12, 0))
 
     def select_and_activate(self, index: int) -> None:
         self.selected = index
@@ -328,8 +376,10 @@ class ClipboardApp:
         items = self.filtered()
         if 0 <= index < len(items):
             items[index]["pinned"] = not items[index].get("pinned", False)
+            self.pin_notice = "Pinned — saved across restarts" if items[index]["pinned"] else "Unpinned — available this session"
             self.save_history()
             self.draw()
+            self.root.after(1400, self.clear_pin_notice)
 
     def run(self) -> None:
         self.root.mainloop()

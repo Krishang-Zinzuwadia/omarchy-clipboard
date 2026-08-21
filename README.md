@@ -12,7 +12,9 @@ Windows-style clipboard history for Omarchy on Wayland/Hyprland.
 - Pin items with the `☆` button or `P`; pinned items persist across restarts.
 - Unpinned items are automatically cleared when the PC reboots.
 - Pinned history is stored locally in `~/.local/share/omarchy-clipboard`.
+- The panel automatically uses the active Omarchy theme colors.
 - Selecting an item puts it back on the system clipboard, so `Ctrl+V` works everywhere, including `Ctrl+Shift+V` in terminals.
+- Selecting text also types it into the previously focused text field when `wtype` is available.
 - No background network access and no external runtime dependencies beyond Python, Tk, `wl-copy`, and `wl-paste`.
 
 ## Install
