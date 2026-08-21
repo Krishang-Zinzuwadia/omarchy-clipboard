@@ -1,6 +1,6 @@
 # Omarchy Clipboard
 
-Windows-style clipboard history for Omarchy on Wayland/Hyprland.
+Windows-style clipboard history for Omarchy on Wayland/Hyprland, built with native GTK4 for crisp system-font rendering.
 
 ## Features
 
@@ -15,7 +15,7 @@ Windows-style clipboard history for Omarchy on Wayland/Hyprland.
 - The panel automatically uses the active Omarchy theme colors.
 - Selecting an item puts it back on the system clipboard, so `Ctrl+V` works everywhere, including `Ctrl+Shift+V` in terminals.
 - Selecting text also types it into the previously focused text field when `wtype` is available.
-- No background network access and no external runtime dependencies beyond Python, Tk, `wl-copy`, and `wl-paste`.
+- No background network access and no external runtime dependencies beyond Python, GTK4, `wl-copy`, and `wl-paste`.
 
 ## Install
 
