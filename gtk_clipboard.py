@@ -63,7 +63,9 @@ class ClipboardApp(Gtk.Application):
         self.last_signature: str | None = None
         self.window: Gtk.ApplicationWindow | None = None
         self.items_box: Gtk.ListBox | None = None
+        self.scroller: Gtk.ScrolledWindow | None = None
         self.cards: list[Gtk.Box] = []
+        self.rows: list[Gtk.ListBoxRow] = []
         self.selected = 0
         self.notice = ""
         self.holder: subprocess.Popen[bytes] | None = None
@@ -191,12 +193,12 @@ class ClipboardApp(Gtk.Application):
         self.items_box.add_css_class("items")
         self.items_box.set_selection_mode(Gtk.SelectionMode.NONE)
         self.items_box.set_focusable(False)
-        scroller = Gtk.ScrolledWindow()
-        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroller.set_vexpand(True)
-        scroller.set_focusable(False)
-        scroller.set_child(self.items_box)
-        panel.append(scroller)
+        self.scroller = Gtk.ScrolledWindow()
+        self.scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.scroller.set_vexpand(True)
+        self.scroller.set_focusable(False)
+        self.scroller.set_child(self.items_box)
+        panel.append(self.scroller)
         footer = Gtk.Label(label=self.notice or "↑ ↓ navigate    Enter select    P pin    Delete remove    Esc close", xalign=0)
         footer.add_css_class("footer")
         footer.set_margin_top(8)
@@ -215,6 +217,7 @@ class ClipboardApp(Gtk.Application):
         if not self.items_box:
             return
         self.cards = []
+        self.rows = []
         while (row := self.items_box.get_row_at_index(0)):
             self.items_box.remove(row)
         for index, item in enumerate(self.filtered()[:8]):
@@ -260,6 +263,7 @@ class ClipboardApp(Gtk.Application):
             row.add_controller(click)
             self.items_box.append(row)
             self.cards.append(box)
+            self.rows.append(row)
 
     def key_pressed(self, _controller, keyval, _keycode, _state) -> bool:
         name = Gdk.keyval_name(keyval)
@@ -290,6 +294,19 @@ class ClipboardApp(Gtk.Application):
             else:
                 card.remove_css_class("active")
             card.queue_draw()
+        GLib.idle_add(self.center_current_row)
+
+    def center_current_row(self) -> bool:
+        """Keep keyboard navigation centered in the scroll viewport."""
+        if not self.scroller or not (0 <= self.selected < len(self.rows)):
+            return False
+        adjustment = self.scroller.get_vadjustment()
+        row = self.rows[self.selected]
+        allocation = row.get_allocation()
+        target = allocation.y + allocation.height / 2 - adjustment.get_page_size() / 2
+        maximum = max(adjustment.get_lower(), adjustment.get_upper() - adjustment.get_page_size())
+        adjustment.set_value(max(adjustment.get_lower(), min(target, maximum)))
+        return False
 
     def pin_index(self, index: int) -> None:
         items = self.filtered()
