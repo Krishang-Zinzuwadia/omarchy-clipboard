@@ -310,33 +310,33 @@ class ClipboardApp:
             child.destroy()
         self.image_refs.clear()
         screen_w, screen_h = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
-        width = min(560, max(440, screen_w - 40))
-        row_height = 76
-        visible_limit = min(8, max(1, (screen_h - 290) // row_height))
+        width = min(720, max(560, screen_w - 56))
+        row_height = 94
+        visible_limit = min(8, max(1, (screen_h - 340) // row_height))
         items = self.filtered()[:visible_limit]
         if items:
             self.selected = min(self.selected, len(items) - 1)
-        height = max(300, 194 + len(items) * row_height)
+        height = max(360, 226 + len(items) * row_height)
         self.root.geometry(f"{width}x{height}+{(screen_w-width)//2}+{(screen_h-height)//2}")
         self.root.resizable(False, False)
 
-        outer = tk.Frame(self.root, bg=BG, padx=28, pady=25)
+        outer = tk.Frame(self.root, bg=BG, padx=36, pady=32)
         outer.pack(fill="both", expand=True)
         heading = tk.Frame(outer, bg=BG)
-        heading.pack(fill="x", pady=(0, 18))
-        tk.Label(heading, text="▣", bg=BG, fg=ACCENT, font=(self.ui_font, 25, "bold")).pack(side="left", padx=(0, 11))
+        heading.pack(fill="x", pady=(0, 23))
+        tk.Label(heading, text="▣", bg=BG, fg=ACCENT, font=(self.ui_font, 32, "bold")).pack(side="left", padx=(0, 14))
         title = tk.Frame(heading, bg=BG)
         title.pack(side="left")
-        tk.Label(title, text="Clipboard", bg=BG, fg=TEXT, font=(self.ui_font, 22, "bold")).pack(anchor="w")
-        tk.Label(title, text="Everything you copy, ready when you need it", bg=BG, fg=MUTED, font=(self.ui_font, 9)).pack(anchor="w", pady=(1, 0))
-        tk.Label(heading, text="SUPER  V", bg=BG, fg=MUTED, font=(self.mono_font, 9, "bold")).pack(side="right", pady=(7, 0))
+        tk.Label(title, text="Clipboard", bg=BG, fg=TEXT, font=(self.ui_font, 30, "bold")).pack(anchor="w")
+        tk.Label(title, text="Everything you copy, ready when you need it", bg=BG, fg=MUTED, font=(self.ui_font, 11)).pack(anchor="w", pady=(2, 0))
+        tk.Label(heading, text="SUPER  V", bg=BG, fg=MUTED, font=(self.mono_font, 10, "bold")).pack(side="right", pady=(10, 0))
 
-        search = tk.Frame(outer, bg=PANEL, height=46, highlightbackground=DIVIDER, highlightthickness=1)
-        search.pack(fill="x", pady=(0, 15))
+        search = tk.Frame(outer, bg=PANEL, height=58, highlightbackground=DIVIDER, highlightthickness=1)
+        search.pack(fill="x", pady=(0, 20))
         search.pack_propagate(False)
-        tk.Label(search, text="⌕", bg=PANEL, fg=ACCENT, font=(self.ui_font, 19)).pack(side="left", padx=(14, 8))
-        tk.Label(search, text=self.query or "Search your clipboard", bg=PANEL, fg=TEXT if self.query else MUTED, font=(self.ui_font, 11), anchor="w").pack(side="left", fill="both", expand=True)
-        tk.Label(search, text=f"{len(self.history)} saved", bg=PANEL, fg=MUTED, font=(self.ui_font, 9)).pack(side="right", padx=15)
+        tk.Label(search, text="⌕", bg=PANEL, fg=ACCENT, font=(self.ui_font, 25)).pack(side="left", padx=(18, 11))
+        tk.Label(search, text=self.query or "Search your clipboard", bg=PANEL, fg=TEXT if self.query else MUTED, font=(self.ui_font, 14), anchor="w").pack(side="left", fill="both", expand=True)
+        tk.Label(search, text=f"{len(self.history)} saved", bg=PANEL, fg=MUTED, font=(self.ui_font, 10)).pack(side="right", padx=18)
 
         content = tk.Frame(outer, bg=BG)
         content.pack(fill="both", expand=True)
@@ -347,9 +347,10 @@ class ClipboardApp:
             tk.Label(empty, text="Copy text or an image and it will appear here.", bg=PANEL, fg=MUTED, font=(self.ui_font, 10)).pack(pady=(7, 0))
         for index, item in enumerate(items):
             selected = index == self.selected
+            pinned = item.get("pinned", False)
             card_bg = ACCENT_DARK if selected else PANEL
-            card = tk.Frame(content, bg=card_bg, padx=15, pady=10, cursor="hand2",
-                            highlightbackground=ACCENT if selected else DIVIDER,
+            card = tk.Frame(content, bg=card_bg, padx=18, pady=14, cursor="hand2",
+                            highlightbackground=YELLOW if pinned else (ACCENT if selected else DIVIDER),
                             highlightthickness=1)
             card.pack(fill="x", pady=(0, 7))
             card.bind("<Button-1>", lambda _e, i=index: self.select_and_activate(i))
@@ -360,7 +361,7 @@ class ClipboardApp:
                     if scale > 1:
                         img = img.subsample(scale, scale)
                     self.image_refs.append(img)
-                    thumb = tk.Frame(card, bg="#101214", width=82, height=52)
+                    thumb = tk.Frame(card, bg="#101214", width=104, height=68)
                     thumb.pack(side="left", padx=(0, 14))
                     thumb.pack_propagate(False)
                     tk.Label(thumb, image=img, bg="#101214").pack(expand=True)
@@ -373,21 +374,25 @@ class ClipboardApp:
                     label = label[:107] + "…"
             text_box = tk.Frame(card, bg=card_bg)
             text_box.pack(side="left", fill="both", expand=True)
-            tk.Label(text_box, text=label, bg=card_bg, fg=TEXT, font=(self.ui_font, 11), anchor="w", justify="left", wraplength=width - 180).pack(anchor="w", fill="x", expand=True)
+            text_row = tk.Frame(text_box, bg=card_bg)
+            text_row.pack(anchor="w", fill="x", expand=True)
+            if pinned:
+                tk.Label(text_row, text="⚑", bg=card_bg, fg=YELLOW, font=(self.ui_font, 16, "bold")).pack(side="left", padx=(0, 9))
+            tk.Label(text_row, text=label, bg=card_bg, fg=TEXT, font=(self.ui_font, 14), anchor="w", justify="left", wraplength=width - 230).pack(side="left", fill="x", expand=True)
             kind = "IMAGE" if item["kind"] == "image" else "TEXT"
             kind_color = GREEN if item["kind"] == "image" else CYAN
-            tk.Label(text_box, text=kind, bg=card_bg, fg=kind_color, font=(self.mono_font, 8, "bold"), anchor="w").pack(anchor="w", pady=(4, 0))
+            tk.Label(text_box, text=kind, bg=card_bg, fg=kind_color, font=(self.mono_font, 9, "bold"), anchor="w").pack(anchor="w", pady=(7, 0))
             pin = tk.Button(card, text="★" if item.get("pinned") else "☆",
                             command=lambda i=index: self.pin_index(i),
-                            bg=card_bg, fg=YELLOW if item.get("pinned") else MUTED,
+                            bg=card_bg, fg=YELLOW if pinned else MUTED,
                             activebackground=card_bg, activeforeground=ACCENT,
                             relief="flat", borderwidth=0, highlightthickness=0,
-                            font=(self.ui_font, 15), cursor="hand2")
+                            font=(self.ui_font, 19), cursor="hand2")
             pin.pack(side="right", padx=(8, 0))
             if selected:
-                tk.Label(card, text="↵", bg=card_bg, fg=ACCENT, font=(self.ui_font, 17, "bold")).pack(side="right", padx=(10, 0))
+                tk.Label(card, text="↵", bg=card_bg, fg=ACCENT, font=(self.ui_font, 20, "bold")).pack(side="right", padx=(10, 0))
         footer_text = self.pin_notice or "↑ ↓ navigate     Enter select     P pin     Esc close"
-        tk.Label(outer, text=footer_text, bg=BG, fg=ACCENT if self.pin_notice else MUTED, font=(self.mono_font, 8, "bold" if self.pin_notice else "normal")).pack(anchor="w", pady=(12, 0))
+        tk.Label(outer, text=footer_text, bg=BG, fg=ACCENT if self.pin_notice else MUTED, font=(self.mono_font, 10, "bold" if self.pin_notice else "normal")).pack(anchor="w", pady=(16, 0))
 
     def select_and_activate(self, index: int) -> None:
         self.selected = index
