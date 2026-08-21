@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import signal
 import socket
 import subprocess
@@ -70,6 +69,9 @@ class ClipboardApp(Gtk.Application):
         self.notice = ""
         self.holder: subprocess.Popen[bytes] | None = None
         self.server: socket.socket | None = None
+        self.previous_window_address: str | None = None
+        self.previous_window_is_terminal = False
+        self.scroll_animation_id: int | None = None
 
     def load(self) -> list[dict]:
         try:
@@ -98,7 +100,7 @@ class ClipboardApp(Gtk.Application):
         window {{ background: {COLORS['background']}; }}
         .panel {{ background: {COLORS['background']}; padding: 8px; }}
         .footer {{ color: {COLORS['muted']}; font-size: 12px; }}
-        .card {{ background: transparent; border: 0; border-radius: 0; padding: 9px 12px; }}
+        .card {{ background: transparent; border: 0; border-bottom: 1px solid {COLORS['muted']}; border-radius: 0; padding: 9px 12px; }}
         .card.active {{ background: {COLORS['selection']}; border: 1px solid {COLORS['accent']}; border-radius: 0; }}
         .card.pinned {{ border-left: 2px solid {COLORS['yellow']}; }}
         list row, list row:selected, list row:focus, list row:focus-visible {{
@@ -177,6 +179,7 @@ class ClipboardApp(Gtk.Application):
 
     def show_panel(self) -> bool:
         self.selected = 0
+        self.previous_window_address, self.previous_window_is_terminal = self.active_window()
         if self.window:
             self.window.set_visible(True)
             self.render_items()
@@ -212,6 +215,17 @@ class ClipboardApp(Gtk.Application):
         self.window.present()
         self.window.grab_focus()
         return False
+
+    @staticmethod
+    def active_window() -> tuple[str | None, bool]:
+        try:
+            data = json.loads(subprocess.check_output(
+                ["/usr/bin/hyprctl", "activewindow", "-j"], stderr=subprocess.DEVNULL
+            ))
+            terminal = any(tag.rstrip("*") == "terminal" for tag in data.get("tags", []))
+            return data.get("address"), terminal
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+            return None, False
 
     def render_items(self) -> None:
         if not self.items_box:
@@ -297,7 +311,7 @@ class ClipboardApp(Gtk.Application):
         GLib.idle_add(self.center_current_row)
 
     def center_current_row(self) -> bool:
-        """Keep keyboard navigation centered in the scroll viewport."""
+        """Smoothly keep keyboard navigation centered in the scroll viewport."""
         if not self.scroller or not (0 <= self.selected < len(self.rows)):
             return False
         adjustment = self.scroller.get_vadjustment()
@@ -305,8 +319,27 @@ class ClipboardApp(Gtk.Application):
         allocation = row.get_allocation()
         target = allocation.y + allocation.height / 2 - adjustment.get_page_size() / 2
         maximum = max(adjustment.get_lower(), adjustment.get_upper() - adjustment.get_page_size())
-        adjustment.set_value(max(adjustment.get_lower(), min(target, maximum)))
+        target = max(adjustment.get_lower(), min(target, maximum))
+        self.animate_scroll(adjustment, target)
         return False
+
+    def animate_scroll(self, adjustment: Gtk.Adjustment, target: float) -> None:
+        if self.scroll_animation_id is not None:
+            GLib.source_remove(self.scroll_animation_id)
+        start = adjustment.get_value()
+        started_at = time.monotonic()
+        duration = 0.12
+
+        def step() -> bool:
+            progress = min((time.monotonic() - started_at) / duration, 1.0)
+            eased = 1 - (1 - progress) ** 3
+            adjustment.set_value(start + (target - start) * eased)
+            if progress >= 1:
+                self.scroll_animation_id = None
+                return False
+            return True
+
+        self.scroll_animation_id = GLib.timeout_add(16, step)
 
     def pin_index(self, index: int) -> None:
         items = self.filtered()
@@ -367,14 +400,48 @@ class ClipboardApp(Gtk.Application):
             self.replace_clipboard(item["text"].encode())
         self.last_signature = None
         self.window.set_visible(False)
-        if item["kind"] == "text" and shutil.which("wtype"):
-            # Pasting after the panel releases focus targets the previously
-            # focused application and uses the same clipboard selection.
-            GLib.timeout_add(150, self.paste_into_previous_focus)
+        if item["kind"] == "text":
+            GLib.timeout_add(120, self.restore_focus_and_paste)
+
+    def restore_focus_and_paste(self) -> bool:
+        if self.previous_window_address:
+            subprocess.run(
+                [
+                    "/usr/bin/hyprctl",
+                    "eval",
+                    f"hl.dispatch(hl.dsp.focus({{ window = 'address:{self.previous_window_address}' }}))",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        # Give Hyprland one frame to focus the former text field before paste.
+        GLib.timeout_add(80, self.paste_into_previous_focus)
+        return False
+
+    def paste_into_previous_focus(self) -> bool:
+        # Send through Hyprland's virtual keyboard so the restored focus,
+        # not the hidden GTK window, receives the shortcut.
+        mods = "CTRL + SHIFT" if self.previous_window_is_terminal else "CTRL"
+        self.send_paste_key_state(mods, "down")
+        GLib.timeout_add(50, lambda: self.release_paste_key(mods))
+        return False
 
     @staticmethod
-    def paste_into_previous_focus() -> bool:
-        subprocess.run(["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"], check=False)
+    def send_paste_key_state(mods: str, state: str) -> None:
+        subprocess.run(
+            [
+                "/usr/bin/hyprctl",
+                "eval",
+                f"hl.dispatch(hl.dsp.send_key_state({{ mods = '{mods}', key = 'V', state = '{state}' }}))",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+
+    def release_paste_key(self, mods: str) -> bool:
+        self.send_paste_key_state(mods, "up")
         return False
 
     def replace_clipboard(self, data: bytes, mime: str | None = None) -> None:
