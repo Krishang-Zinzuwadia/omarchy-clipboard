@@ -63,9 +63,8 @@ class ClipboardApp(Gtk.Application):
         self.last_signature: str | None = None
         self.window: Gtk.ApplicationWindow | None = None
         self.items_box: Gtk.ListBox | None = None
-        self.search: Gtk.Entry | None = None
+        self.cards: list[Gtk.Box] = []
         self.selected = 0
-        self.query = ""
         self.notice = ""
         self.holder: subprocess.Popen[bytes] | None = None
         self.server: socket.socket | None = None
@@ -95,12 +94,10 @@ class ClipboardApp(Gtk.Application):
     def install_css(self) -> None:
         css = f"""
         window {{ background: {COLORS['background']}; }}
-        .panel {{ background: {COLORS['background']}; padding: 22px; }}
-        .title {{ color: {COLORS['foreground']}; font-size: 25px; font-weight: 800; }}
-        .subtitle, .footer {{ color: {COLORS['muted']}; font-size: 12px; }}
-        .search {{ background: {COLORS['panel']}; color: {COLORS['foreground']}; border: 1px solid {COLORS['selection']}; border-radius: 10px; padding: 11px 14px; font-size: 15px; }}
+        .panel {{ background: {COLORS['background']}; padding: 20px; }}
+        .footer {{ color: {COLORS['muted']}; font-size: 12px; }}
         .card {{ background: {COLORS['panel']}; border: 1px solid {COLORS['selection']}; border-radius: 9px; padding: 11px 13px; }}
-        .card:selected {{ background: {COLORS['selection']}; border-color: {COLORS['accent']}; }}
+        .card.active {{ background: {COLORS['selection']}; border-color: {COLORS['accent']}; }}
         .card.pinned {{ border-color: {COLORS['yellow']}; }}
         .item-text {{ color: {COLORS['foreground']}; font-size: 16px; }}
         .kind {{ color: {COLORS['cyan']}; font-size: 10px; font-weight: 700; letter-spacing: 1px; }}
@@ -171,18 +168,14 @@ class ClipboardApp(Gtk.Application):
         self.save()
 
     def filtered(self) -> list[dict]:
-        q = self.query.lower().strip()
-        return [x for x in self.history if not q or (x.get("kind") == "text" and q in x.get("text", "").lower())]
+        return self.history
 
     def show_panel(self) -> bool:
         self.selected = 0
-        self.query = ""
         if self.window:
             self.window.set_visible(True)
             self.render_items()
             self.window.present()
-            if self.search:
-                self.search.grab_focus()
             return False
         self.window = Gtk.ApplicationWindow(application=self)
         self.window.set_title("Omarchy Clipboard")
@@ -191,37 +184,15 @@ class ClipboardApp(Gtk.Application):
         self.window.set_resizable(False)
         panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         panel.add_css_class("panel")
-        head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        icon = Gtk.Label(label="▣")
-        icon.set_css_classes(["title"])
-        head.append(icon)
-        titles = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        title = Gtk.Label(label="Clipboard", xalign=0)
-        title.add_css_class("title")
-        titles.append(title)
-        subtitle = Gtk.Label(label="Everything you copy, ready when you need it", xalign=0)
-        subtitle.add_css_class("subtitle")
-        titles.append(subtitle)
-        head.append(titles)
-        panel.append(head)
-        self.search = Gtk.Entry(placeholder_text="Search your clipboard")
-        self.search.add_css_class("search")
-        self.search.set_margin_top(20)
-        self.search.set_margin_bottom(16)
-        self.search.connect("changed", self.search_changed)
-        self.search.connect("activate", lambda _entry: self.activate_index(self.selected))
-        panel.append(self.search)
         self.items_box = Gtk.ListBox()
         self.items_box.add_css_class("items")
-        self.items_box.set_selection_mode(Gtk.SelectionMode.SINGLE)
-        self.items_box.connect("row-activated", lambda _box, row: self.activate_index(row.get_index()))
+        self.items_box.set_selection_mode(Gtk.SelectionMode.NONE)
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroller.set_min_content_height(340)
-        scroller.set_max_content_height(360)
+        scroller.set_vexpand(True)
         scroller.set_child(self.items_box)
         panel.append(scroller)
-        footer = Gtk.Label(label=self.notice or "↑ ↓ navigate    Enter select    P pin    Esc close", xalign=0)
+        footer = Gtk.Label(label=self.notice or "↑ ↓ navigate    Enter select    P pin    Delete remove    Esc close", xalign=0)
         footer.add_css_class("footer")
         footer.set_margin_top(14)
         panel.append(footer)
@@ -231,17 +202,13 @@ class ClipboardApp(Gtk.Application):
         self.window.add_controller(key)
         self.render_items()
         self.window.present()
-        self.search.grab_focus()
+        self.window.grab_focus()
         return False
-
-    def search_changed(self, entry: Gtk.Entry) -> None:
-        self.query = entry.get_text()
-        self.selected = 0
-        self.render_items()
 
     def render_items(self) -> None:
         if not self.items_box:
             return
+        self.cards = []
         while (row := self.items_box.get_row_at_index(0)):
             self.items_box.remove(row)
         for index, item in enumerate(self.filtered()[:8]):
@@ -249,6 +216,8 @@ class ClipboardApp(Gtk.Application):
             row.set_margin_bottom(7)
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
             box.add_css_class("card")
+            if index == self.selected:
+                box.add_css_class("active")
             if item.get("pinned"):
                 box.add_css_class("pinned")
             if item["kind"] == "image":
@@ -280,9 +249,11 @@ class ClipboardApp(Gtk.Application):
             pin_button.connect("clicked", lambda _b, i=index: self.pin_index(i))
             box.append(pin_button)
             row.set_child(box)
+            click = Gtk.GestureClick()
+            click.connect("released", lambda _gesture, _count, _x, _y, i=index: self.activate_index(i))
+            row.add_controller(click)
             self.items_box.append(row)
-        if self.items_box.get_row_at_index(self.selected):
-            self.items_box.select_row(self.items_box.get_row_at_index(self.selected))
+            self.cards.append(box)
 
     def key_pressed(self, _controller, keyval, _keycode, _state) -> bool:
         name = Gdk.keyval_name(keyval)
@@ -299,16 +270,19 @@ class ClipboardApp(Gtk.Application):
             self.select_current_row()
         elif name in ("p", "P") and items:
             self.pin_index(self.selected)
+        elif name in ("Delete", "KP_Delete") and items:
+            self.delete_index(self.selected)
         else:
             return False
         return True
 
     def select_current_row(self) -> None:
-        """Move the ListBox selection without rebuilding the panel."""
-        if self.items_box:
-            row = self.items_box.get_row_at_index(self.selected)
-            if row:
-                self.items_box.select_row(row)
+        """Move the active-card style without rebuilding the panel."""
+        for index, card in enumerate(self.cards):
+            if index == self.selected:
+                card.add_css_class("active")
+            else:
+                card.remove_css_class("active")
 
     def pin_index(self, index: int) -> None:
         items = self.filtered()
@@ -318,6 +292,41 @@ class ClipboardApp(Gtk.Application):
             self.save()
             self.render_items()
             GLib.timeout_add(1400, self.clear_notice)
+
+    def delete_index(self, index: int) -> None:
+        items = self.filtered()
+        if index >= len(items):
+            return
+        item = items[index]
+        if item.get("pinned"):
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                modal=True,
+                text="Delete pinned clipboard item?",
+                secondary_text="This pinned item will be removed permanently.",
+            )
+            dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+            dialog.add_button("Delete", Gtk.ResponseType.ACCEPT)
+            dialog.connect("response", lambda box, response, target=item: self.confirm_delete(box, response, target))
+            dialog.present()
+            return
+        self.remove_item(item)
+
+    def confirm_delete(self, dialog: Gtk.MessageDialog, response: int, item: dict) -> None:
+        dialog.destroy()
+        if response == Gtk.ResponseType.ACCEPT:
+            self.remove_item(item)
+
+    def remove_item(self, item: dict) -> None:
+        self.history.remove(item)
+        if item.get("kind") == "image":
+            try:
+                Path(item["path"]).unlink(missing_ok=True)
+            except OSError:
+                pass
+        self.selected = max(0, min(self.selected, len(self.filtered()) - 1))
+        self.save()
+        self.render_items()
 
     def clear_notice(self) -> bool:
         self.notice = ""
