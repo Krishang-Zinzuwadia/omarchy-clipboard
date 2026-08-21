@@ -182,17 +182,19 @@ class ClipboardApp(Gtk.Application):
             return False
         self.window = Gtk.ApplicationWindow(application=self)
         self.window.set_title("Omarchy Clipboard")
-        self.window.set_default_size(460, 185)
-        self.window.set_size_request(460, 185)
+        self.window.set_default_size(360, 330)
+        self.window.set_size_request(360, 330)
         self.window.set_resizable(False)
         panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         panel.add_css_class("panel")
         self.items_box = Gtk.ListBox()
         self.items_box.add_css_class("items")
         self.items_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.items_box.set_focusable(False)
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroller.set_vexpand(True)
+        scroller.set_focusable(False)
         scroller.set_child(self.items_box)
         panel.append(scroller)
         footer = Gtk.Label(label=self.notice or "↑ ↓ navigate    Enter select    P pin    Delete remove    Esc close", xalign=0)
@@ -201,6 +203,7 @@ class ClipboardApp(Gtk.Application):
         panel.append(footer)
         self.window.set_child(panel)
         key = Gtk.EventControllerKey()
+        key.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         key.connect("key-pressed", self.key_pressed)
         self.window.add_controller(key)
         self.render_items()
@@ -286,6 +289,7 @@ class ClipboardApp(Gtk.Application):
                 card.add_css_class("active")
             else:
                 card.remove_css_class("active")
+            card.queue_draw()
 
     def pin_index(self, index: int) -> None:
         items = self.filtered()
