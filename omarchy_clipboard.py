@@ -19,7 +19,6 @@ APP_NAME = "Omarchy Clipboard"
 BASE_DIR = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "omarchy-clipboard"
 HISTORY_FILE = BASE_DIR / "history.json"
 SOCKET_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "omarchy-clipboard.sock"
-MAX_ITEMS = 80
 POLL_SECONDS = 0.35
 
 BG = "#151719"
@@ -49,6 +48,7 @@ def run_clipboard(*args: str, input_data: bytes | None = None) -> bytes | None:
 class ClipboardApp:
     def __init__(self) -> None:
         BASE_DIR.mkdir(parents=True, exist_ok=True)
+        self.boot_id = self.current_boot_id()
         self.history: list[dict] = self.load_history()
         self.last_signature: str | None = None
         self.visible = False
@@ -76,16 +76,29 @@ class ClipboardApp:
         self.poll_clipboard()
         self.start_socket()
 
+    @staticmethod
+    def current_boot_id() -> str:
+        try:
+            return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+        except OSError:
+            return "unknown"
+
     def load_history(self) -> list[dict]:
         try:
-            return json.loads(HISTORY_FILE.read_text())
+            state = json.loads(HISTORY_FILE.read_text())
+            if isinstance(state, list):
+                return [item for item in state if item.get("pinned")]
+            if state.get("boot_id") == self.boot_id:
+                return state.get("items", [])
+            return [item for item in state.get("items", []) if item.get("pinned")]
         except (OSError, ValueError, TypeError):
             return []
 
     def save_history(self) -> None:
         tmp = HISTORY_FILE.with_suffix(".tmp")
         try:
-            tmp.write_text(json.dumps(self.history, ensure_ascii=False))
+            state = {"boot_id": self.boot_id, "items": self.history}
+            tmp.write_text(json.dumps(state, ensure_ascii=False))
             tmp.replace(HISTORY_FILE)
         except OSError:
             pass
@@ -136,9 +149,9 @@ class ClipboardApp:
         if signature == self.last_signature:
             return
         self.last_signature = signature
+        previous = next((x for x in self.history if x["kind"] == "text" and x["text"] == text), None)
         self.history = [x for x in self.history if not (x["kind"] == "text" and x["text"] == text)]
-        self.history.insert(0, {"id": uuid.uuid4().hex, "kind": "text", "text": text, "time": time.time()})
-        self.history = self.history[:MAX_ITEMS]
+        self.history.insert(0, {"id": uuid.uuid4().hex, "kind": "text", "text": text, "time": time.time(), "pinned": bool(previous and previous.get("pinned"))})
         self.save_history()
 
     def add_image(self, data: bytes, mime: str) -> None:
@@ -152,9 +165,9 @@ class ClipboardApp:
             path.write_bytes(data)
         except OSError:
             return
+        previous = next((x for x in self.history if x["kind"] == "image" and x.get("signature") == signature), None)
         self.history = [x for x in self.history if not (x["kind"] == "image" and x.get("signature") == signature)]
-        self.history.insert(0, {"id": uuid.uuid4().hex, "kind": "image", "path": str(path), "mime": mime, "signature": signature, "time": time.time()})
-        self.history = self.history[:MAX_ITEMS]
+        self.history.insert(0, {"id": uuid.uuid4().hex, "kind": "image", "path": str(path), "mime": mime, "signature": signature, "time": time.time(), "pinned": bool(previous and previous.get("pinned"))})
         self.save_history()
 
     def filtered(self) -> list[dict]:
@@ -189,6 +202,9 @@ class ClipboardApp:
             return
         if event.keysym in ("Up", "Down", "Return", "Escape"):
             return
+        if event.keysym.lower() == "p" and not (event.state & 0x4):
+            self.toggle_pin()
+            return
         if event.keysym == "BackSpace":
             self.query = self.query[:-1]
         elif len(event.char) == 1 and not (event.state & 0x4):
@@ -197,6 +213,16 @@ class ClipboardApp:
             return
         self.selected = 0
         self.draw()
+
+    def toggle_pin(self) -> str:
+        items = self.filtered()
+        if not items:
+            return "break"
+        item = items[self.selected]
+        item["pinned"] = not item.get("pinned", False)
+        self.save_history()
+        self.draw()
+        return "break"
 
     def activate(self) -> str:
         items = self.filtered()
@@ -283,13 +309,27 @@ class ClipboardApp:
             tk.Label(text_box, text=label, bg=card_bg, fg=TEXT, font=(self.ui_font, 11), anchor="w", justify="left", wraplength=width - 180).pack(anchor="w", fill="x", expand=True)
             kind = "IMAGE" if item["kind"] == "image" else "TEXT"
             tk.Label(text_box, text=kind, bg=card_bg, fg=ACCENT if selected else MUTED, font=(self.mono_font, 8, "bold"), anchor="w").pack(anchor="w", pady=(4, 0))
+            pin = tk.Button(card, text="★" if item.get("pinned") else "☆",
+                            command=lambda i=index: self.pin_index(i),
+                            bg=card_bg, fg=ACCENT if item.get("pinned") else MUTED,
+                            activebackground=card_bg, activeforeground=ACCENT,
+                            relief="flat", borderwidth=0, highlightthickness=0,
+                            font=(self.ui_font, 15), cursor="hand2")
+            pin.pack(side="right", padx=(8, 0))
             if selected:
                 tk.Label(card, text="↵", bg=card_bg, fg=ACCENT, font=(self.ui_font, 17, "bold")).pack(side="right", padx=(10, 0))
-        tk.Label(outer, text="↑ ↓ navigate     Enter select     Esc close", bg=BG, fg=MUTED, font=(self.mono_font, 8)).pack(anchor="w", pady=(12, 0))
+        tk.Label(outer, text="↑ ↓ navigate     Enter select     P pin     Esc close", bg=BG, fg=MUTED, font=(self.mono_font, 8)).pack(anchor="w", pady=(12, 0))
 
     def select_and_activate(self, index: int) -> None:
         self.selected = index
         self.activate()
+
+    def pin_index(self, index: int) -> None:
+        items = self.filtered()
+        if 0 <= index < len(items):
+            items[index]["pinned"] = not items[index].get("pinned", False)
+            self.save_history()
+            self.draw()
 
     def run(self) -> None:
         self.root.mainloop()

@@ -8,7 +8,10 @@ Windows-style clipboard history for Omarchy on Wayland/Hyprland.
 - Arrow keys navigate; `Enter` or a click selects and copies an item.
 - Text and image clipboard contents are supported.
 - Search by typing while the panel is open.
-- History persists locally in `~/.local/share/omarchy-clipboard`.
+- Unpinned history remains available for the entire current PC session without an item cap.
+- Pin items with the `☆` button or `P`; pinned items persist across restarts.
+- Unpinned items are automatically cleared when the PC reboots.
+- Pinned history is stored locally in `~/.local/share/omarchy-clipboard`.
 - Selecting an item puts it back on the system clipboard, so `Ctrl+V` works everywhere, including `Ctrl+Shift+V` in terminals.
 - No background network access and no external runtime dependencies beyond Python, Tk, `wl-copy`, and `wl-paste`.
 
@@ -33,6 +36,7 @@ hyprctl reload
 | `Super+V` | Open history |
 | `↑` / `↓` | Navigate |
 | `Enter` | Copy selected item and close |
+| `P` or `☆` | Pin/unpin selected item |
 | `Esc` | Close |
 | Type / Backspace | Filter text history |
 
