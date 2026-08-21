@@ -284,11 +284,12 @@ class ClipboardApp(Gtk.Application):
             self.window.set_visible(False)
         elif name in ("Return", "KP_Enter") and items:
             self.activate_index(self.selected)
-        elif name == "Down" and items:
-            self.selected = min(self.selected + 1, min(len(items), 8) - 1)
+        elif name in ("Down", "Right") and items:
+            last_index = min(len(items), 8) - 1
+            self.selected = 0 if self.selected == last_index else self.selected + 1
             self.select_current_row()
-        elif name == "Up" and items:
-            self.selected = max(0, self.selected - 1)
+        elif name in ("Up", "Left") and items:
+            self.selected = min(len(items), 8) - 1 if self.selected == 0 else self.selected - 1
             self.select_current_row()
         elif name in ("p", "P") and items:
             self.pin_index(self.selected)
