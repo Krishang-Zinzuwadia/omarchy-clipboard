@@ -5,11 +5,9 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import signal
 import socket
 import subprocess
-import threading
 import time
 import uuid
 from pathlib import Path
@@ -31,7 +29,7 @@ TEXT = "#f3f4f5"
 MUTED = "#9da4aa"
 ACCENT = "#7dd3fc"
 ACCENT_DARK = "#153449"
-RED = "#fda4af"
+DIVIDER = "#30353a"
 
 
 def run_clipboard(*args: str, input_data: bytes | None = None) -> bytes | None:
@@ -63,6 +61,9 @@ class ClipboardApp:
         self.root.withdraw()
         self.root.title(APP_NAME)
         self.root.configure(bg=BG)
+        families = set(tkfont.families(self.root))
+        self.ui_font = "Inter" if "Inter" in families else "Liberation Sans"
+        self.mono_font = "JetBrains Mono" if "JetBrains Mono" in families else "monospace"
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
         self.root.bind("<Escape>", lambda _e: self.hide())
         self.root.bind("<Return>", lambda _e: self.activate())
@@ -215,52 +216,76 @@ class ClipboardApp:
         for child in self.root.winfo_children():
             child.destroy()
         self.image_refs.clear()
-        width, height = 760, 590
         screen_w, screen_h = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        width = min(820, max(500, screen_w - 40))
+        row_height = 76
+        visible_limit = min(8, max(1, (screen_h - 290) // row_height))
+        items = self.filtered()[:visible_limit]
+        if items:
+            self.selected = min(self.selected, len(items) - 1)
+        height = max(300, 194 + len(items) * row_height)
         self.root.geometry(f"{width}x{height}+{(screen_w-width)//2}+{(screen_h-height)//2}")
         self.root.resizable(False, False)
 
-        outer = tk.Frame(self.root, bg=BG, padx=24, pady=22)
+        outer = tk.Frame(self.root, bg=BG, padx=28, pady=25)
         outer.pack(fill="both", expand=True)
-        tk.Label(outer, text="Clipboard", bg=BG, fg=TEXT, font=("Sans", 24, "bold")).pack(anchor="w")
-        tk.Label(outer, text="Super+V  ·  ↑ ↓ navigate  ·  Enter select  ·  Esc close", bg=BG, fg=MUTED, font=("Sans", 10)).pack(anchor="w", pady=(3, 16))
+        heading = tk.Frame(outer, bg=BG)
+        heading.pack(fill="x", pady=(0, 18))
+        tk.Label(heading, text="▣", bg=BG, fg=ACCENT, font=(self.ui_font, 25, "bold")).pack(side="left", padx=(0, 11))
+        title = tk.Frame(heading, bg=BG)
+        title.pack(side="left")
+        tk.Label(title, text="Clipboard", bg=BG, fg=TEXT, font=(self.ui_font, 22, "bold")).pack(anchor="w")
+        tk.Label(title, text="Everything you copy, ready when you need it", bg=BG, fg=MUTED, font=(self.ui_font, 9)).pack(anchor="w", pady=(1, 0))
+        tk.Label(heading, text="SUPER  V", bg=BG, fg=MUTED, font=(self.mono_font, 9, "bold")).pack(side="right", pady=(7, 0))
 
-        search = tk.Frame(outer, bg=PANEL, height=42)
-        search.pack(fill="x", pady=(0, 14))
+        search = tk.Frame(outer, bg=PANEL, height=46, highlightbackground=DIVIDER, highlightthickness=1)
+        search.pack(fill="x", pady=(0, 15))
         search.pack_propagate(False)
-        tk.Label(search, text="⌕", bg=PANEL, fg=ACCENT, font=("Sans", 18)).pack(side="left", padx=(13, 7))
-        tk.Label(search, text=self.query or "Type to search clipboard history", bg=PANEL, fg=TEXT if self.query else MUTED, font=("Sans", 11), anchor="w").pack(side="left", fill="both", expand=True)
-        tk.Label(search, text=f"{len(self.history)} items", bg=PANEL, fg=MUTED, font=("Sans", 9)).pack(side="right", padx=14)
+        tk.Label(search, text="⌕", bg=PANEL, fg=ACCENT, font=(self.ui_font, 19)).pack(side="left", padx=(14, 8))
+        tk.Label(search, text=self.query or "Search your clipboard", bg=PANEL, fg=TEXT if self.query else MUTED, font=(self.ui_font, 11), anchor="w").pack(side="left", fill="both", expand=True)
+        tk.Label(search, text=f"{len(self.history)} saved", bg=PANEL, fg=MUTED, font=(self.ui_font, 9)).pack(side="right", padx=15)
 
-        canvas = tk.Canvas(outer, bg=BG, highlightthickness=0)
-        canvas.pack(fill="both", expand=True)
-        items = self.filtered()
+        content = tk.Frame(outer, bg=BG)
+        content.pack(fill="both", expand=True)
         if not items:
-            tk.Label(canvas, text="Your clipboard history is empty", bg=BG, fg=MUTED, font=("Sans", 12)).pack(pady=90)
-        for index, item in enumerate(items[:8]):
+            empty = tk.Frame(content, bg=PANEL, highlightbackground=DIVIDER, highlightthickness=1, padx=20, pady=28)
+            empty.pack(fill="x", pady=4)
+            tk.Label(empty, text="Nothing here yet", bg=PANEL, fg=TEXT, font=(self.ui_font, 12, "bold")).pack()
+            tk.Label(empty, text="Copy text or an image and it will appear here.", bg=PANEL, fg=MUTED, font=(self.ui_font, 10)).pack(pady=(7, 0))
+        for index, item in enumerate(items):
             selected = index == self.selected
-            card = tk.Frame(canvas, bg=ACCENT_DARK if selected else PANEL, padx=14, pady=11, cursor="hand2")
-            card.pack(fill="x", pady=(0, 8))
+            card_bg = ACCENT_DARK if selected else PANEL
+            card = tk.Frame(content, bg=card_bg, padx=15, pady=10, cursor="hand2",
+                            highlightbackground=ACCENT if selected else DIVIDER,
+                            highlightthickness=1)
+            card.pack(fill="x", pady=(0, 7))
             card.bind("<Button-1>", lambda _e, i=index: self.select_and_activate(i))
             if item["kind"] == "image":
                 try:
                     img = tk.PhotoImage(file=item["path"])
-                    scale = max(1, img.width() // 110, img.height() // 70)
+                    scale = max(1, (img.width() + 99) // 100, (img.height() + 51) // 52)
                     if scale > 1:
                         img = img.subsample(scale, scale)
                     self.image_refs.append(img)
-                    tk.Label(card, image=img, bg=card["bg"]).pack(side="left", padx=(0, 14))
+                    thumb = tk.Frame(card, bg="#101214", width=82, height=52)
+                    thumb.pack(side="left", padx=(0, 14))
+                    thumb.pack_propagate(False)
+                    tk.Label(thumb, image=img, bg="#101214").pack(expand=True)
                     label = "Image"
                 except tk.TclError:
                     label = "Image (preview unavailable)"
             else:
                 label = item["text"].replace("\n", " ↵ ")
-                if len(label) > 90:
-                    label = label[:87] + "…"
-            tk.Label(card, text=label, bg=card["bg"], fg=TEXT, font=("Sans", 11), anchor="w", justify="left", wraplength=575).pack(side="left", fill="x", expand=True)
+                if len(label) > 110:
+                    label = label[:107] + "…"
+            text_box = tk.Frame(card, bg=card_bg)
+            text_box.pack(side="left", fill="both", expand=True)
+            tk.Label(text_box, text=label, bg=card_bg, fg=TEXT, font=(self.ui_font, 11), anchor="w", justify="left", wraplength=width - 180).pack(anchor="w", fill="x", expand=True)
+            kind = "IMAGE" if item["kind"] == "image" else "TEXT"
+            tk.Label(text_box, text=kind, bg=card_bg, fg=ACCENT if selected else MUTED, font=(self.mono_font, 8, "bold"), anchor="w").pack(anchor="w", pady=(4, 0))
             if selected:
-                tk.Label(card, text="↵", bg=card["bg"], fg=ACCENT, font=("Sans", 16, "bold")).pack(side="right")
-        tk.Label(outer, text="Clipboard history is stored locally on this device", bg=BG, fg=MUTED, font=("Sans", 9)).pack(anchor="w", pady=(10, 0))
+                tk.Label(card, text="↵", bg=card_bg, fg=ACCENT, font=(self.ui_font, 17, "bold")).pack(side="right", padx=(10, 0))
+        tk.Label(outer, text="↑ ↓ navigate     Enter select     Esc close", bg=BG, fg=MUTED, font=(self.mono_font, 8)).pack(anchor="w", pady=(12, 0))
 
     def select_and_activate(self, index: int) -> None:
         self.selected = index
