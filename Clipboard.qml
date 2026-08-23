@@ -19,6 +19,7 @@ Item {
   property bool resetViewport: false
   property bool deleteConfirmation: false
   property bool historyDirty: false
+  property bool captureReady: false
   property var history: []
   property var rows: []
 
@@ -112,7 +113,17 @@ Item {
   Process {
     id: historyRead
     command: [root.pluginDir + "/history-io.sh", "read"]
-    stdout: StdioCollector { onStreamFinished: root.load(text) }
+    stdout: StdioCollector {
+      onStreamFinished: {
+        root.load(text)
+        if (!root.captureReady) {
+          root.captureReady = true
+          currentProc.running = true
+          textWatcher.running = true
+          imageWatcher.running = true
+        }
+      }
+    }
   }
   Process {
     id: historyWrite
@@ -145,7 +156,7 @@ Item {
   Process {
     id: initializeProc
     command: [root.pluginDir + "/initialize-history.sh"]
-    onExited: { historyRead.running = true; currentProc.running = true; textWatcher.running = true; imageWatcher.running = true }
+    onExited: { historyRead.running = true }
   }
   Process {
     id: currentProc

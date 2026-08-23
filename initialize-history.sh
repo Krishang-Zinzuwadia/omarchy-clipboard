@@ -15,7 +15,7 @@ safe_input() {
 }
 
 if [[ ! -f "$history" ]] && safe_input "$legacy"; then
-  jq --arg boot "$boot_id" '
+  jq -c --arg boot "$boot_id" '
     .items // . as $items |
     {bootId:$boot, items: [
       $items[]? |
@@ -30,7 +30,7 @@ fi
 
 {
   "$io" read
-} | jq --arg boot "$boot_id" '
+} | jq -c --arg boot "$boot_id" '
   if .bootId == $boot then .
   else {bootId:$boot, items:[(.items // .)[]? | select(.pinned == true)]}
   end
