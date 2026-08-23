@@ -11,9 +11,9 @@ mime="$(jq -r '.mime // "image/png"' <<<"$payload")"
 
 case "$kind" in
   text)
-    # Stream the original JSON field so trailing newlines are preserved and
-    # clipboard contents never enter a process argument list.
-    printf '%s' "$payload" | jq -jr '.text // empty' | wl-copy --type text/plain;charset=utf-8
+    # Selection paste is single-line so multiline history entries cannot submit
+    # forms or create unintended commands in the target application.
+    printf '%s' "$payload" | jq -jr '(.text // empty) | gsub("[\\r\\n]+"; " ")' | wl-copy --type text/plain;charset=utf-8
     ;;
   image)
     [[ -n "$path" && -f "$path" ]] && wl-copy --type "$mime" <"$path"
