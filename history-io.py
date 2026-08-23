@@ -101,7 +101,7 @@ try:
     if action == "read":
         sys.stdout.buffer.write(read_state(directory))
     elif action == "write":
-        write_state(directory, sys.stdin.buffer.read(MAX_HISTORY_BYTES + 1))
+        write_state(directory, sys.stdin.buffer.readline(MAX_HISTORY_BYTES + 1))
     else:
         raise ValueError("read or write required")
 except Exception:

@@ -6,17 +6,14 @@ set -euo pipefail
 IFS= read -r payload || exit 0
 [[ ${#payload} -le 100000 ]] || exit 1
 kind="$(jq -r '.kind // empty' <<<"$payload")"
-text="$(jq -jr '.text // empty' <<<"$payload")"
 path="$(jq -r '.path // empty' <<<"$payload")"
 mime="$(jq -r '.mime // "image/png"' <<<"$payload")"
 
 case "$kind" in
   text)
-    printf '%s' "$text" | wl-copy --type text/plain;charset=utf-8
-    # The QML overlay closes immediately after starting this helper. Wait for
-    # keyboard focus to return to the previously focused text input.
-    sleep 0.15
-    wtype -- "$text"
+    # Stream the original JSON field so trailing newlines are preserved and
+    # clipboard contents never enter a process argument list.
+    printf '%s' "$payload" | jq -jr '.text // empty' | wl-copy --type text/plain;charset=utf-8
     ;;
   image)
     [[ -n "$path" && -f "$path" ]] && wl-copy --type "$mime" <"$path"

@@ -18,6 +18,7 @@ Item {
   property int selectedIndex: 0
   property bool resetViewport: false
   property bool deleteConfirmation: false
+  property bool historyDirty: false
   property var history: []
   property var rows: []
 
@@ -62,6 +63,7 @@ Item {
   }
   function load(raw) { history = History.parseState(raw, bootId); rebuild() }
   function save() {
+    historyDirty = true
     historyWrite.pending = JSON.stringify({ bootId: bootId, items: history }) + "\n"
     if (!historyWrite.running) historyWrite.running = true
   }
@@ -104,7 +106,7 @@ Item {
     save(); rebuild()
   }
 
-  Component.onCompleted: { bootProc.running = true; initializeProc.running = true }
+  Component.onCompleted: { bootProc.running = true }
 
   ListModel { id: model }
   Process {
@@ -121,23 +123,24 @@ Item {
     onStarted: {
       writing = pending
       pending = ""
-      write(writing)
+      write(writing + "\n")
     }
     onExited: {
       writing = ""
       if (pending.length) running = true
+      else root.historyDirty = false
     }
   }
   Timer {
     interval: 1000
     running: true
     repeat: true
-    onTriggered: { if (!historyRead.running) historyRead.running = true }
+    onTriggered: { if (!root.historyDirty && !historyRead.running) historyRead.running = true }
   }
   Process {
     id: bootProc
     command: ["cat", "/proc/sys/kernel/random/boot_id"]
-    stdout: StdioCollector { onStreamFinished: root.bootId = text.trim() }
+    stdout: StdioCollector { onStreamFinished: { root.bootId = text.trim(); initializeProc.running = true } }
   }
   Process {
     id: initializeProc
@@ -280,7 +283,7 @@ Item {
           anchors.bottom: parent.bottom
           height: Style.space(22)
           text: root.filterText.length ? root.filterText : "↑ ↓ ← → navigate    Enter select    P pin    Delete remove    Esc close"
-          color: root.foreground; opacity: 0.55; elide: Text.ElideRight
+          color: root.foreground; opacity: 0.55; elide: Text.ElideRight; textFormat: Text.PlainText
           font.family: Style.font.menuFamily; font.pixelSize: Style.font.caption
           verticalAlignment: Text.AlignVCenter
         }

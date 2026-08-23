@@ -6,6 +6,7 @@ state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-clipboard"
 image_dir="$state_dir/images"
 max_text_bytes=16384
 max_image_bytes=10485760
+max_cache_bytes=52428800
 mkdir -p -m 700 "$state_dir" "$image_dir"
 
 types="$(wl-paste --list-types 2>/dev/null || true)"
@@ -17,6 +18,8 @@ emit_image() {
   tmp="$(mktemp --tmpdir="$image_dir" clipboard.XXXXXX)" || exit 0
   head -c "$((max_image_bytes + 1))" >"$tmp"
   [[ -s "$tmp" && "$(stat -c '%s' -- "$tmp")" -le "$max_image_bytes" ]] || { rm -f "$tmp"; exit 0; }
+  cache_bytes="$(du -sb "$image_dir" | awk '{print $1}')"
+  (( cache_bytes + $(stat -c '%s' -- "$tmp") <= max_cache_bytes )) || { rm -f "$tmp"; exit 0; }
   hash="$(sha256sum "$tmp" | awk '{print $1}')"
   file="$image_dir/$hash.$ext"
   [[ -e "$file" ]] && rm -f "$tmp" || mv "$tmp" "$file"

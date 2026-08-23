@@ -17,18 +17,29 @@ if [[ "$(realpath "$ROOT")" != "$(realpath "$PLUGIN_DIR")" ]]; then
 fi
 
 python3 - "$HOME/.config/omarchy/shell.json" "$ID" <<'PY'
-import json
+import json, os, stat, tempfile
 from pathlib import Path
 import sys
 path, plugin_id = map(Path, sys.argv[1:3])
+parent = path.parent
+parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+info = parent.lstat()
+if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+    raise SystemExit("unsafe Omarchy config directory")
 data = json.loads(path.read_text()) if path.exists() else {"version": 1}
 plugins = [p for p in data.get("plugins", []) if (p.get("id") if isinstance(p, dict) else p) != "omarchy.clipboard"]
 if not any((p.get("id") if isinstance(p, dict) else p) == str(plugin_id) for p in plugins):
     plugins.append({"id": str(plugin_id), "enabled": True})
 data["plugins"] = plugins
-tmp = path.with_suffix(".tmp")
-tmp.write_text(json.dumps(data, indent=2) + "\n")
-tmp.replace(path)
+fd, tmp = tempfile.mkstemp(prefix=".shell.", dir=parent)
+try:
+    with os.fdopen(fd, "w") as handle:
+        handle.write(json.dumps(data, indent=2) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp, path)
+finally:
+    Path(tmp).unlink(missing_ok=True)
 PY
 
 python3 - "$HOME/.config/hypr/bindings.lua" "$ID" <<'PY'

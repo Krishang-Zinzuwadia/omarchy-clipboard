@@ -8,8 +8,7 @@ reboot-persistent pins.
 - `Super+V` opens a keyboard-focused clipboard overlay.
 - Text and PNG image clipboard entries are captured locally, with image thumbnails.
 - Arrow-key navigation wraps and keeps the active item visible.
-- `Enter` restores the selected item to the system clipboard. For text, it also
-  inserts the selection into the previously focused text input.
+- `Enter` restores the selected item to the system clipboard.
 - Pin entries with `P`; pinned entries survive reboots while unpinned entries
   are cleared at the next boot.
 - `Delete` removes entries and asks for confirmation before deleting a pin.
@@ -45,7 +44,7 @@ For local development from a checkout, run `./install.sh` instead.
 | --- | --- |
 | `Super+V` | Open or close clipboard history |
 | `↑` `↓` `←` `→` | Navigate entries |
-| `Enter` | Copy the selected entry; insert selected text into the prior input |
+| `Enter` | Copy the selected entry to the system clipboard |
 | `P` | Pin or unpin the selected entry |
 | `Delete` | Remove the selected entry |
 | `Esc` | Close the overlay or clear the active filter |
