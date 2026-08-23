@@ -6,9 +6,10 @@ Marketplace-ready native Omarchy Quattro overlay plugin. Its permanent ID is
 ## Features
 
 - `Super+V` toggles a centered, keyboard-focused overlay.
-- Captures text plus common image MIME types, with image thumbnails and a full preview.
-- `Up`, `Down`, `Left`, and `Right` wrap smoothly through the centered selection.
-- `Enter` or click copies the selected item; `P` pins/unpins it.
+- Captures text and PNG clipboard images, with image thumbnails.
+- `Up`, `Down`, `Left`, and `Right` wrap through items without hiding the first result.
+- `Enter` or click restores the selected item to the clipboard; selected text is also inserted into the previously focused text input.
+- `P` pins/unpins an item.
 - Pinned entries survive reboot. Unpinned entries are cleared at the next boot.
 - `Delete` asks for explicit confirmation before removing a pinned entry.
 - The first load imports history and image paths from the retired GTK app when available.
@@ -16,6 +17,7 @@ Marketplace-ready native Omarchy Quattro overlay plugin. Its permanent ID is
 ## Install
 
 ```bash
+# Inspect the installer, then explicitly run it:
 ./install.sh
 ```
 
@@ -23,7 +25,9 @@ The installer validates the manifest and QML, installs under
 `~/.config/omarchy/plugins/io.github.krishang-zinzuwadia.omarchy-clipboard`,
 enables it in `~/.config/omarchy/shell.json`, replaces the `Super+V` binding,
 disables stock `omarchy.clipboard`, rescans the shell, and then retires the GTK
-user service/autostart entry.
+user service/autostart entry. It does not require elevated privileges or
+download and execute remote code. Running the installer is explicit consent for
+those user-configuration changes.
 
 ## Remove
 

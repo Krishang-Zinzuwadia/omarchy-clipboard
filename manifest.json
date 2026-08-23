@@ -4,6 +4,7 @@
   "name": "Omarchy Clipboard",
   "version": "2.0.0",
   "author": "Krishang Zinzuwadia",
+  "license": "MIT",
   "description": "Persistent pinned clipboard history for Omarchy",
   "kinds": ["overlay"],
   "keepLoaded": true,
