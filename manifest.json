@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.krishang-zinzuwadia.omarchy-clipboard",
+  "name": "Omarchy Clipboard",
+  "version": "2.0.0",
+  "author": "Krishang Zinzuwadia",
+  "description": "Persistent pinned clipboard history for Omarchy",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Clipboard.qml"
+  }
+}
