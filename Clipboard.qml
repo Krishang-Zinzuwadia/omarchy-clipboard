@@ -77,7 +77,11 @@ Item {
   }
   function copy(index) {
     if (index < 0 || index >= model.count) return
-    copyProc.command = [pluginDir + "/copy-entry.sh", historyPath, String(model.get(index).historyIndex)]
+    var entry = model.get(index)
+    copyProc.command = [
+      pluginDir + "/copy-entry.sh", "--entry", entry.kind, entry.entryText,
+      entry.path, entry.mime
+    ]
     copyProc.running = true
     close()
   }
