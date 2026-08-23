@@ -78,10 +78,10 @@ Item {
   function copy(index) {
     if (index < 0 || index >= model.count) return
     var entry = model.get(index)
-    copyProc.command = [
-      pluginDir + "/copy-entry.sh", "--entry", entry.kind, entry.entryText,
-      entry.path, entry.mime
-    ]
+    copyProc.payload = JSON.stringify({
+      kind: entry.kind, text: entry.entryText, path: entry.path, mime: entry.mime
+    })
+    copyProc.command = [pluginDir + "/copy-entry.sh", "--entry"]
     copyProc.running = true
     close()
   }
@@ -166,7 +166,15 @@ Item {
     interval: 1000
     onTriggered: { if (!textWatcher.running) textWatcher.running = true; if (!imageWatcher.running) imageWatcher.running = true }
   }
-  Process { id: copyProc }
+  Process {
+    id: copyProc
+    property string payload: ""
+    stdinEnabled: true
+    onStarted: {
+      write(payload + "\n")
+      payload = ""
+    }
+  }
 
   PanelWindow {
     id: panel

@@ -3,10 +3,12 @@
 set -euo pipefail
 
 [[ "${1:-}" == "--entry" ]] || exit 64
-kind="${2:-}"
-text="${3:-}"
-path="${4:-}"
-mime="${5:-image/png}"
+IFS= read -r payload || exit 0
+[[ ${#payload} -le 100000 ]] || exit 1
+kind="$(jq -r '.kind // empty' <<<"$payload")"
+text="$(jq -jr '.text // empty' <<<"$payload")"
+path="$(jq -r '.path // empty' <<<"$payload")"
+mime="$(jq -r '.mime // "image/png"' <<<"$payload")"
 
 case "$kind" in
   text)
