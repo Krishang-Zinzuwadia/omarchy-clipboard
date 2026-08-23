@@ -4,11 +4,12 @@ set -euo pipefail
 
 history_file="${1:?history file required}"
 index="${2:?history index required}"
-kind="$(jq -r ".items[$index].kind // empty" "$history_file")"
+io="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/history-io.sh"
+kind="$("$io" read "$history_file" | jq -r ".items[$index].kind // empty")"
 
 case "$kind" in
   text)
-    text="$(jq -jr ".items[$index].text" "$history_file")"
+    text="$("$io" read "$history_file" | jq -jr ".items[$index].text")"
     printf '%s' "$text" | wl-copy --type text/plain;charset=utf-8
     # The QML overlay closes immediately after starting this helper. Wait for
     # keyboard focus to return to the previously focused text input.
@@ -16,8 +17,8 @@ case "$kind" in
     wtype -- "$text"
     ;;
   image)
-    mime="$(jq -r ".items[$index].mime // \"image/png\"" "$history_file")"
-    path="$(jq -r ".items[$index].path // empty" "$history_file")"
+    mime="$("$io" read "$history_file" | jq -r ".items[$index].mime // \"image/png\"")"
+    path="$("$io" read "$history_file" | jq -r ".items[$index].path // empty")"
     [[ -n "$path" && -f "$path" ]] && wl-copy --type "$mime" <"$path"
     ;;
 esac

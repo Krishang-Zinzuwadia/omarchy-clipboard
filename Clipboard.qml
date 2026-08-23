@@ -61,8 +61,12 @@ Item {
     })
   }
   function load(raw) { history = History.parseState(raw, bootId); rebuild() }
-  function save() { historyFile.setText(JSON.stringify({ bootId: bootId, items: history }, null, 2) + "\n") }
+  function save() {
+    historyWrite.pending = JSON.stringify({ bootId: bootId, items: history }) + "\n"
+    if (!historyWrite.running) historyWrite.running = true
+  }
   function addEntry(raw) {
+    if (String(raw).length > 100000) return
     try { history = History.add(history, JSON.parse(raw), 300); save(); rebuild() } catch (error) {}
   }
   function move(delta) {
@@ -99,15 +103,32 @@ Item {
   Component.onCompleted: { bootProc.running = true; initializeProc.running = true }
 
   ListModel { id: model }
-  FileView {
-    id: historyFile
-    path: root.historyPath
-    watchChanges: true
-    atomicWrites: true
-    printErrors: false
-    onLoaded: root.load(text())
-    onLoadFailed: root.load('{"items":[]}')
-    onFileChanged: reload()
+  Process {
+    id: historyRead
+    command: [root.pluginDir + "/history-io.sh", "read"]
+    stdout: StdioCollector { onStreamFinished: root.load(text) }
+  }
+  Process {
+    id: historyWrite
+    property string pending: ""
+    property string writing: ""
+    command: [root.pluginDir + "/history-io.sh", "write"]
+    stdinEnabled: true
+    onStarted: {
+      writing = pending
+      pending = ""
+      write(writing)
+    }
+    onExited: {
+      writing = ""
+      if (pending.length) running = true
+    }
+  }
+  Timer {
+    interval: 1000
+    running: true
+    repeat: true
+    onTriggered: { if (!historyRead.running) historyRead.running = true }
   }
   Process {
     id: bootProc
@@ -117,7 +138,7 @@ Item {
   Process {
     id: initializeProc
     command: [root.pluginDir + "/initialize-history.sh"]
-    onExited: { historyFile.reload(); currentProc.running = true; textWatcher.running = true; imageWatcher.running = true }
+    onExited: { historyRead.running = true; currentProc.running = true; textWatcher.running = true; imageWatcher.running = true }
   }
   Process {
     id: currentProc
@@ -230,7 +251,7 @@ Item {
               Column {
                 width: parent.width - (kind === "image" ? 72 : 0); anchors.verticalCenter: parent.verticalCenter; spacing: 3
                 Text { text: pinned ? "● PINNED" : (kind === "image" ? "IMAGE" : "TEXT"); color: row.pinned ? "#ebcb8b" : root.foreground; opacity: .7; font.pixelSize: 11 }
-                Text { width: parent.width; text: kind === "image" ? "Image clipboard item" : entryText.replace(/\s+/g, " "); color: root.foreground; elide: Text.ElideRight; font.pixelSize: Style.font.title }
+                Text { width: parent.width; text: kind === "image" ? "Image clipboard item" : entryText.replace(/\s+/g, " "); textFormat: Text.PlainText; color: root.foreground; elide: Text.ElideRight; font.pixelSize: Style.font.title }
               }
             }
             MouseArea {
