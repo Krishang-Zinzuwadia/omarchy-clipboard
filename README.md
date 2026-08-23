@@ -1,21 +1,17 @@
 # Omarchy Clipboard
 
-Windows-style clipboard history for Omarchy on Wayland/Hyprland, built with native GTK4 for crisp system-font rendering.
+Marketplace-ready native Omarchy Quattro overlay plugin. Its permanent ID is
+`io.github.krishang-zinzuwadia.omarchy-clipboard`.
 
 ## Features
 
-- `Super+V` opens a centered clipboard history panel.
-- Arrow keys navigate; `Enter` or a click selects and copies an item.
-- Text and image clipboard contents are supported.
-- Search by typing while the panel is open.
-- Unpinned history remains available for the entire current PC session without an item cap.
-- Pin items with the `☆` button or `P`; pinned items persist across restarts.
-- Unpinned items are automatically cleared when the PC reboots.
-- Pinned history is stored locally in `~/.local/share/omarchy-clipboard`.
-- The panel automatically uses the active Omarchy theme colors.
-- Selecting an item puts it back on the system clipboard, so `Ctrl+V` works everywhere, including `Ctrl+Shift+V` in terminals.
-- Selecting text also types it into the previously focused text field when `wtype` is available.
-- No background network access and no external runtime dependencies beyond Python, GTK4, `wl-copy`, and `wl-paste`.
+- `Super+V` toggles a centered, keyboard-focused overlay.
+- Captures text plus common image MIME types, with image thumbnails and a full preview.
+- `Up`, `Down`, `Left`, and `Right` wrap smoothly through the centered selection.
+- `Enter` or click copies the selected item; `P` pins/unpins it.
+- Pinned entries survive reboot. Unpinned entries are cleared at the next boot.
+- `Delete` asks for explicit confirmation before removing a pinned entry.
+- The first load imports history and image paths from the retired GTK app when available.
 
 ## Install
 
@@ -23,22 +19,40 @@ Windows-style clipboard history for Omarchy on Wayland/Hyprland, built with nati
 ./install.sh
 ```
 
-The installer enables a user systemd service and adds the Omarchy user autostart entry. The Hyprland binding is kept in `~/.config/hypr/bindings.lua` so it survives Omarchy updates.
+The installer validates the manifest and QML, installs under
+`~/.config/omarchy/plugins/io.github.krishang-zinzuwadia.omarchy-clipboard`,
+enables it in `~/.config/omarchy/shell.json`, replaces the `Super+V` binding,
+disables stock `omarchy.clipboard`, rescans the shell, and then retires the GTK
+user service/autostart entry.
 
-After installation, reload Hyprland:
+## Remove
 
 ```bash
-hyprctl reload
+omarchy plugin disable io.github.krishang-zinzuwadia.omarchy-clipboard
+rm -rf ~/.config/omarchy/plugins/io.github.krishang-zinzuwadia.omarchy-clipboard
 ```
+
+Restore a preferred clipboard binding in `~/.config/hypr/bindings.lua`, then
+run `hyprctl reload`. History is retained in
+`~/.local/state/omarchy-clipboard`; remove that directory separately only if
+you want to erase saved pinned entries and captured images.
+
+## Dependencies
+
+Omarchy Quattro / `omarchy-shell`, Quickshell, `wl-clipboard` (`wl-copy` and
+`wl-paste`), `jq`, `setpriv` (util-linux), and `qmllint` for development
+validation. The install script also uses `hyprctl` to apply the binding.
+
+## Privacy
+
+Clipboard text and images are processed locally. The plugin makes no network
+requests. Captured images and history are stored only under
+`~/.local/state/omarchy-clipboard`. Avoid copying secrets: the capture helper
+honors the KDE password-manager clipboard hint.
 
 ## Controls
 
-| Key | Action |
-| --- | --- |
-| `Super+V` | Open history |
-| `↑` / `↓` | Navigate |
-| `Enter` | Copy selected item and close |
-| `P` or `☆` | Pin/unpin selected item |
-| `Esc` | Close |
-| Type / Backspace | Filter text history |
+`Super+V` opens, arrows navigate, `Enter` copies, `P` toggles a pin, `Delete`
+removes (with confirmation for pinned entries), and `Esc` closes or clears the
+current filter.
 
