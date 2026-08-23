@@ -9,8 +9,12 @@ omarchy plugin validate "$ROOT"
 command -v qmllint >/dev/null && qmllint "$ROOT/Clipboard.qml"
 
 mkdir -p "$PLUGIN_DIR"
-install -m 0644 "$ROOT/manifest.json" "$ROOT/Clipboard.qml" "$ROOT/ClipboardHistory.js" "$PLUGIN_DIR/"
-install -m 0755 "$ROOT/capture.sh" "$ROOT/copy-entry.sh" "$ROOT/initialize-history.sh" "$PLUGIN_DIR/"
+# `omarchy plugin add` already clones this repository into PLUGIN_DIR. Avoid
+# copying files onto themselves so the same helper supports that install path.
+if [[ "$(realpath "$ROOT")" != "$(realpath "$PLUGIN_DIR")" ]]; then
+  install -m 0644 "$ROOT/manifest.json" "$ROOT/Clipboard.qml" "$ROOT/ClipboardHistory.js" "$PLUGIN_DIR/"
+  install -m 0755 "$ROOT/capture.sh" "$ROOT/copy-entry.sh" "$ROOT/initialize-history.sh" "$PLUGIN_DIR/"
+fi
 
 python3 - "$HOME/.config/omarchy/shell.json" "$ID" <<'PY'
 import json

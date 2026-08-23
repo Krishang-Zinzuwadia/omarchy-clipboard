@@ -1,62 +1,92 @@
 # Omarchy Clipboard
 
-Marketplace-ready native Omarchy Quattro overlay plugin. Its permanent ID is
-`io.github.krishang-zinzuwadia.omarchy-clipboard`.
+A native Omarchy Quattro clipboard-history overlay with session history and
+reboot-persistent pins.
 
-## Features
+## Highlights
 
-- `Super+V` toggles a centered, keyboard-focused overlay.
-- Captures text and PNG clipboard images, with image thumbnails.
-- `Up`, `Down`, `Left`, and `Right` wrap through items without hiding the first result.
-- `Enter` or click restores the selected item to the clipboard; selected text is also inserted into the previously focused text input.
-- `P` pins/unpins an item.
-- Pinned entries survive reboot. Unpinned entries are cleared at the next boot.
-- `Delete` asks for explicit confirmation before removing a pinned entry.
-- The first load imports history and image paths from the retired GTK app when available.
+- `Super+V` opens a keyboard-focused clipboard overlay.
+- Text and PNG image clipboard entries are captured locally, with image thumbnails.
+- Arrow-key navigation wraps and keeps the active item visible.
+- `Enter` restores the selected item to the system clipboard. For text, it also
+  inserts the selection into the previously focused text input.
+- Pin entries with `P`; pinned entries survive reboots while unpinned entries
+  are cleared at the next boot.
+- `Delete` removes entries and asks for confirmation before deleting a pin.
+
+## Requirements
+
+- Omarchy Quattro / `omarchy-shell` and Quickshell
+- `wl-clipboard` (`wl-copy`, `wl-paste`), `jq`, and util-linux (`setpriv`)
+- `hyprctl` for installing the `Super+V` binding
+
+`qmllint` is only required when validating development changes.
 
 ## Install
 
+Install, enable, and configure the plugin with one command:
+
 ```bash
-# Inspect the installer, then explicitly run it:
-./install.sh
+omarchy plugin add https://github.com/Krishang-Zinzuwadia/omarchy-clipboard.git --enable && "$HOME/.config/omarchy/plugins/io.github.krishang-zinzuwadia.omarchy-clipboard/install.sh"
 ```
 
-The installer validates the manifest and QML, installs under
+`omarchy plugin add` shows Omarchy's trust confirmation before it clones and
+enables the public repository. The local helper then configures the plugin in
 `~/.config/omarchy/plugins/io.github.krishang-zinzuwadia.omarchy-clipboard`,
-enables it in `~/.config/omarchy/shell.json`, replaces the `Super+V` binding,
-disables stock `omarchy.clipboard`, rescans the shell, and then retires the GTK
-user service/autostart entry. It does not require elevated privileges or
-download and execute remote code. Running the installer is explicit consent for
-those user-configuration changes.
+disables Omarchy's stock clipboard plugin, and assigns `Super+V`.
+It updates only user-owned Omarchy/Hyprland configuration, requires no elevated
+privileges, and does not download or execute code outside this repository.
+
+For local development from a checkout, run `./install.sh` instead.
+
+## Usage
+
+| Key | Action |
+| --- | --- |
+| `Super+V` | Open or close clipboard history |
+| `↑` `↓` `←` `→` | Navigate entries |
+| `Enter` | Copy the selected entry; insert selected text into the prior input |
+| `P` | Pin or unpin the selected entry |
+| `Delete` | Remove the selected entry |
+| `Esc` | Close the overlay or clear the active filter |
 
 ## Remove
 
 ```bash
-omarchy plugin disable io.github.krishang-zinzuwadia.omarchy-clipboard
-rm -rf ~/.config/omarchy/plugins/io.github.krishang-zinzuwadia.omarchy-clipboard
+PLUGIN_ID=io.github.krishang-zinzuwadia.omarchy-clipboard
+omarchy plugin disable "$PLUGIN_ID"
+rm -rf "$HOME/.config/omarchy/plugins/$PLUGIN_ID"
+hyprctl reload
 ```
 
-Restore a preferred clipboard binding in `~/.config/hypr/bindings.lua`, then
-run `hyprctl reload`. History is retained in
-`~/.local/state/omarchy-clipboard`; remove that directory separately only if
-you want to erase saved pinned entries and captured images.
+Removal leaves clipboard history at `~/.local/state/omarchy-clipboard` and
+leaves the `Super+V` binding choice to you. Delete saved history and images
+only if you want to erase them permanently:
 
-## Dependencies
+```bash
+rm -rf "$HOME/.local/state/omarchy-clipboard"
+```
 
-Omarchy Quattro / `omarchy-shell`, Quickshell, `wl-clipboard` (`wl-copy` and
-`wl-paste`), `jq`, `setpriv` (util-linux), and `qmllint` for development
-validation. The install script also uses `hyprctl` to apply the binding.
+To return to Omarchy's stock clipboard plugin, re-enable it and configure its
+preferred keybinding:
+
+```bash
+omarchy plugin enable omarchy.clipboard
+```
 
 ## Privacy
 
-Clipboard text and images are processed locally. The plugin makes no network
-requests. Captured images and history are stored only under
-`~/.local/state/omarchy-clipboard`. Avoid copying secrets: the capture helper
-honors the KDE password-manager clipboard hint.
+Clipboard text and images are processed locally; this plugin makes no network
+requests. Avoid copying secrets when clipboard history is enabled. The capture
+helper honors the KDE password-manager clipboard hint.
 
-## Controls
+## Development
 
-`Super+V` opens, arrows navigate, `Enter` copies, `P` toggles a pin, `Delete`
-removes (with confirmation for pinned entries), and `Esc` closes or clears the
-current filter.
+```bash
+omarchy plugin validate .
+qmllint Clipboard.qml
+```
+
+Plugin ID: `io.github.krishang-zinzuwadia.omarchy-clipboard`
+License: [MIT](LICENSE)
 
