@@ -13,7 +13,7 @@ case "$kind" in
   text)
     # Selection paste is single-line so multiline history entries cannot submit
     # forms or create unintended commands in the target application.
-    printf '%s' "$payload" | jq -jr '(.text // empty) | gsub("[\\r\\n]+"; " ")' | wl-copy --type text/plain;charset=utf-8
+    printf '%s' "$payload" | jq -jr '(.text // empty) | gsub("[\\r\\n]+"; " ")' | wl-copy --type 'text/plain;charset=utf-8'
     # The overlay closes immediately after this helper starts. Paste from the
     # system clipboard once focus returns, without putting clipboard text in argv.
     sleep 0.25
